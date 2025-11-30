@@ -1,0 +1,15 @@
+Password Reset Request
+
+Hi {{firstName}}, we received a request to reset your password.
+
+Click the link below to reset your password:
+{{resetLink}}
+
+Security Notice: This link will expire in 1 hour. If you didn't request this password reset, please ignore this email.
+
+Best regards,
+The Team
+
+---
+This is an automated message. Please do not reply to this email.
+

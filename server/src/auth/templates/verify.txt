@@ -1,0 +1,16 @@
+Welcome {{firstName}}!
+
+Thank you for signing up! To complete your registration, please verify your email address using the code below:
+
+{{code}}
+
+This code will expire in 15 minutes for security reasons.
+
+If you didn't create an account with us, please ignore this email.
+
+Best regards,
+The Team
+
+---
+This is an automated message. Please do not reply to this email.
+
