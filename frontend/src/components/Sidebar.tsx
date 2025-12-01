@@ -53,23 +53,23 @@ const Sidebar = ({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-2.5">
-        <ul className="space-y-0.5">
+      <nav className="flex-1 p-3">
+        <ul className="space-y-1">
           {navItems.map((item) => (
             <li key={item.label}>
               <button
                 onClick={() => navigate(item.path)}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${location.pathname === item.path
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${location.pathname === item.path
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                   }`}
               >
-                <item.icon className="w-4 h-4 flex-shrink-0" />
+                <item.icon className="w-5 h-5 flex-shrink-0" />
                 {isOpen && (
                   <>
                     <span className="flex-1 text-left">{item.label}</span>
                     {item.badge && (
-                      <Badge className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0">
+                      <Badge className="bg-primary text-primary-foreground text-[10px] px-2 py-0.5 font-semibold">
                         {item.badge}
                       </Badge>
                     )}
