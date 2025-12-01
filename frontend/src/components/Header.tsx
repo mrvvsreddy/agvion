@@ -1,16 +1,22 @@
-import { PanelLeft, Bell } from "lucide-react";
+import { PanelLeft, Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { authService } from "@/services/authService";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
+  workspaceName?: string;
+  userEmail?: string;
 }
 
-const Header = ({ onToggleSidebar }: HeaderProps) => {
+const Header = ({ onToggleSidebar, workspaceName = "Workspace", userEmail }: HeaderProps) => {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
-  
+  const navigate = useNavigate();
+
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === "/") return "Home";
@@ -20,20 +26,56 @@ const Header = ({ onToggleSidebar }: HeaderProps) => {
     return "Home";
   };
 
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setShowProfileDropdown(false);
+      }
+    };
+
+    if (showProfileDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showProfileDropdown]);
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      // Call server-side logout
+      await authService.logout();
+
+      // Clear client-side session
+      authService.clearSession();
+
+      // Redirect to auth page
+      navigate('/auth');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Even if server logout fails, clear client session and redirect
+      authService.clearSession();
+      navigate('/auth');
+    }
+  };
+
   return (
     <header className="h-12 border-b border-border bg-background flex items-center justify-between px-4">
       {/* Left side */}
       <div className="flex items-center gap-3">
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className="h-7 w-7 cursor-pointer hover:bg-transparent"
           onClick={onToggleSidebar}
         >
           <PanelLeft className="w-4 h-4" />
         </Button>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>sankar reddy's Workspace</span>
+          <span>{workspaceName}</span>
           <span className="text-muted-foreground/50">›</span>
           <span className="text-foreground">{getPageTitle()}</span>
         </div>
@@ -41,16 +83,16 @@ const Header = ({ onToggleSidebar }: HeaderProps) => {
 
       {/* Right side */}
       <div className="flex items-center gap-1 relative">
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className="relative h-7 w-7 cursor-pointer hover:bg-transparent"
           onClick={() => setShowNotifications(!showNotifications)}
         >
           <Bell className="w-4 h-4" />
           <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
         </Button>
-        
+
         {/* Notifications Dropdown */}
         {showNotifications && (
           <div className="absolute top-full right-0 mt-2 w-[480px] bg-background border border-border rounded-lg shadow-lg z-50">
@@ -86,7 +128,7 @@ const Header = ({ onToggleSidebar }: HeaderProps) => {
                   </div>
                 </div>
               </div>
-              
+
               {/* Notification 2 */}
               <div className="p-3 rounded-lg cursor-pointer hover:bg-muted/30 transition-colors">
                 <div className="flex items-start gap-3">
@@ -192,9 +234,28 @@ const Header = ({ onToggleSidebar }: HeaderProps) => {
             </div>
           </div>
         )}
-        
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center text-xs font-medium ml-2 cursor-pointer">
-          S
+
+        {/* Profile Icon - Clickable */}
+        <div className="relative" ref={profileDropdownRef}>
+          <div
+            className="w-7 h-7 rounded-full bg-gradient-cyan flex items-center justify-center text-xs font-medium ml-2 cursor-pointer text-white hover:opacity-80 transition-opacity"
+            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+          >
+            {userEmail ? userEmail.charAt(0).toUpperCase() : workspaceName.charAt(0).toUpperCase()}
+          </div>
+
+          {/* Profile Dropdown */}
+          {showProfileDropdown && (
+            <div className="absolute top-full right-0 mt-2 w-48 bg-background border border-border rounded-lg shadow-lg z-50 overflow-hidden">
+              <button
+                onClick={handleLogout}
+                className="w-full px-4 py-2.5 text-left text-sm text-destructive hover:bg-muted/50 transition-colors flex items-center gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

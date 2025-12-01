@@ -13,8 +13,9 @@ import logger from '../../utils/logger';
 interface TenantAuthData {
   id: string;
   email: string;
-  first_name: string;
-  last_name: string | null;
+  name: string;
+  first_name?: string;
+  last_name?: string | null;
   password_hash: string;
   email_verified: boolean;
   tenant_id?: string; // Make optional since it might not always be present
@@ -487,7 +488,7 @@ export class AuthService {
         user: {
           id: (tenant as any).id,
           email: (tenant as any).email,
-          firstName: (tenant as any).first_name,
+          firstName: (tenant as any).first_name || (tenant as any).name,
           lastName: (tenant as any).last_name,
           role: 'owner',
           tenantId: (tenant as any).id,
@@ -546,7 +547,9 @@ export class AuthService {
       const { token: sessionToken } = await this.sessionService.createOrReplaceSession({
         ...user,
         role: 'owner',
-        tenant_id: user.id
+        tenant_id: user.id,
+        first_name: user.first_name || user.name || '',
+        last_name: user.last_name || null
       }, rememberMe, undefined, undefined, (user as any).metadata?.workspaces?.[0]?.id ?? null, (user as any).metadata?.workspaces?.map((w: any) => w.id));
 
       // Update last login
@@ -586,7 +589,7 @@ export class AuthService {
         user: {
           id: user.id,
           email: user.email,
-          firstName: user.first_name,
+          firstName: user.first_name || user.name,
           lastName: user.last_name || undefined,
           tenantId: user.tenant_id || user.id,
           emailVerified: user.email_verified,
@@ -1029,7 +1032,7 @@ export class AuthService {
         await this.emailService.sendVerificationEmail(
           email,
           verificationCode,
-          user.first_name
+          user.first_name || user.name
         );
 
         logger.info('Verification code resent', { userId: user.id, email });

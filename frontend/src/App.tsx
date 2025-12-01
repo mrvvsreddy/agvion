@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import DashboardLayout from "./layouts/DashboardLayout";
 import Index from "./pages/Index";
 import Usage from "./pages/Usage";
 import Billing from "./pages/Billing";
@@ -21,12 +22,15 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/setup-workspace" element={<SetupWorkspace />} />
-          <Route path="/usage" element={<Usage />} />
-          <Route path="/billing" element={<Billing />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route element={<DashboardLayout />}>
+            <Route path="/" element={<Index />} />
+            <Route path="/home" element={<Index />} />
+            <Route path="/usage" element={<Usage />} />
+            <Route path="/billing" element={<Billing />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
           <Route path="/studio/:agentId" element={<Studio />} />
           <Route path="/studio/:agentId/prompt" element={<Studio />} />
           <Route path="/studio/:agentId/workflow" element={<Studio />} />

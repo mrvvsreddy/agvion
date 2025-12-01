@@ -19,7 +19,7 @@ export class KnowledgeValidator {
     if (!sessionToken || typeof sessionToken !== 'string' || sessionToken.length === 0) {
       return { valid: false };
     }
-    
+
     // Security: Prevent token injection by validating format
     if (!/^[A-Za-z0-9\-_]+$/.test(sessionToken)) {
       logger.warn('Invalid session token format', { tokenLength: sessionToken.length });
@@ -51,7 +51,7 @@ export class KnowledgeValidator {
     try {
       const AgentService = (await import('../../AgentService')).default;
       const result = await AgentService.getAgentById(tenantId, agentId);
-      return result.success && result.agent?.tenant_id === tenantId;
+      return result.success;
     } catch (error) {
       logger.warn('Agent validation error', { error: error instanceof Error ? error.message : String(error) });
       return false;
@@ -150,17 +150,17 @@ export class KnowledgeValidator {
       .replace(/\s+/g, '_')
       .replace(/_{2,}/g, '_')
       .replace(/^_|_$/g, '');
-    
+
     if (sanitized.length === 0) sanitized = 'knowledge_base';
     if (/^\d/.test(sanitized)) sanitized = `kb_${sanitized}`;
     if (sanitized.length > 40) sanitized = sanitized.substring(0, 40);
-    
+
     // Security: Add cryptographically secure hash
     const hash = crypto.createHash('sha256')
       .update(`${name}:${agentId}:${Date.now()}`)
       .digest('hex')
       .substring(0, 16);
-    
+
     return `${sanitized}_${hash}`;
   }
 
@@ -173,23 +173,23 @@ export class KnowledgeValidator {
     try {
       const AgentTokenService = (await import('../../AgentTokenService')).default;
       const tokenData = await AgentTokenService.validateAgentToken(agentToken);
-      
+
       if (tokenData && tokenData.tenantId === tenantId) {
         // Security: Validate agent ID format
         if (/^[A-Za-z0-9\-_]{1,64}$/.test(tokenData.agentId)) {
           return tokenData.agentId;
         }
       }
-      
+
       // Try direct agent ID (16 char alphanumeric)
       if (/^[A-Za-z0-9]{16}$/.test(agentToken)) {
         const AgentService = (await import('../../AgentService')).default;
         const result = await AgentService.getAgentById(tenantId, agentToken);
-        if (result.success && result.agent?.tenant_id === tenantId) {
+        if (result.success) {
           return agentToken;
         }
       }
-      
+
       return null;
     } catch (error) {
       logger.warn('Agent ID resolution error', { error: error instanceof Error ? error.message : String(error) });

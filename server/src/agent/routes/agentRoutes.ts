@@ -3,8 +3,7 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken, AuthenticatedRequest } from '../../auth/middleware/authMiddleware';
 import AgentService from '../services/AgentService';
 import AgentTokenService from '../services/AgentTokenService';
-import AgentHomeService from '../services/AgentHomeService';
-import agentFlowRoutes from './agentFlowRoutes';
+
 import logger from '../../utils/logger';
 import rateLimit from 'express-rate-limit';
 
@@ -69,9 +68,8 @@ const validateAgentAccess = async (agentId: string, tenantId: string): Promise<v
       throw new Error('Agent not found');
     }
 
-    if (agent.agent.tenant_id !== tenantId) {
-      throw new Error('Access denied: Agent does not belong to your tenant');
-    }
+    // AgentService.getAgentById already verifies access via workspace check
+
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     logger.error('Agent access validation failed', { agentId, tenantId, error: errorMessage });
@@ -675,203 +673,25 @@ router.get('/studio/:agentId/database-connections', authenticateToken, async (re
  * Update agent prompt using agent ID
  * PUT /api/agents/studio/:agentId/prompt
  */
-router.put('/studio/:agentId/prompt', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { agentId } = req.params;
-    const { prompt } = req.body;
-    const tenantId = req.user?.tenantId;
 
-    if (!tenantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tenant ID is required'
-      });
-    }
-
-    // Validate inputs
-    if (!agentId || !tenantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Agent ID and Tenant ID are required'
-      });
-    }
-
-    validateAgentId(agentId);
-    validatePrompt(prompt);
-    await validateAgentAccess(agentId, tenantId);
-
-    const result = await AgentHomeService.updateAgentPrompt(
-      tenantId,
-      agentId,
-      prompt.trim()
-    );
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    return res.json(result);
-  } catch (error) {
-    logger.error('Error updating agent prompt', { error, agentId: req.params.agentId });
-
-    // Handle validation errors
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    if (errorMessage.includes('Agent ID') || errorMessage.includes('Prompt') || errorMessage.includes('Access denied')) {
-      return res.status(400).json({
-        success: false,
-        message: errorMessage
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-});
 
 /**
  * Get agent prompt using agent ID
  * GET /api/agents/studio/:agentId/prompt
  */
-router.get('/studio/:agentId/prompt', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { agentId } = req.params;
-    const tenantId = req.user?.tenantId;
 
-    if (!tenantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tenant ID is required'
-      });
-    }
-
-    // Validate agent ID and access
-    if (!agentId || !tenantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Agent ID and Tenant ID are required'
-      });
-    }
-
-    validateAgentId(agentId);
-    await validateAgentAccess(agentId, tenantId);
-
-    const result = await AgentHomeService.getAgentPrompt(
-      tenantId,
-      agentId
-    );
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    return res.json(result);
-  } catch (error) {
-    logger.error('Error getting agent prompt', { error, agentId: req.params.agentId });
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-});
 
 /**
  * Update workflow prompt using agent ID (system prompt in main workflow)
  * PUT /api/agents/studio/:agentId/workflows/:workflowId/prompt
  */
-router.put('/studio/:agentId/workflows/:workflowId/prompt', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { agentId, workflowId } = req.params;
-    const { prompt } = req.body;
-    const tenantId = req.user?.tenantId;
 
-    if (!tenantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tenant ID is required'
-      });
-    }
-
-    // Validate inputs
-    if (!agentId || !tenantId || !workflowId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Agent ID, Tenant ID, and Workflow ID are required'
-      });
-    }
-
-    validateAgentId(agentId);
-    validateWorkflowId(workflowId);
-    validatePrompt(prompt);
-    await validateAgentAccess(agentId, tenantId);
-
-    const result = await AgentHomeService.updateWorkflowPrompt(
-      tenantId,
-      agentId,
-      workflowId,
-      prompt.trim()
-    );
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    return res.json(result);
-  } catch (error) {
-    logger.error('Error updating workflow prompt', { error, agentId: req.params.agentId });
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-});
 
 /**
  * Refresh agent home cache using agent ID
  * POST /api/agents/studio/:agentId/refresh-cache
  */
-router.post('/studio/:agentId/refresh-cache', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { agentId } = req.params;
-    const tenantId = req.user?.tenantId;
 
-    if (!tenantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tenant ID is required'
-      });
-    }
-
-    // Validate agent ID and access
-    if (!agentId || !tenantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Agent ID and Tenant ID are required'
-      });
-    }
-
-    validateAgentId(agentId);
-    await validateAgentAccess(agentId, tenantId);
-
-    const result = await AgentHomeService.refreshAgentHomeCache(
-      tenantId,
-      agentId
-    );
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    return res.json(result);
-  } catch (error) {
-    logger.error('Error refreshing agent home cache', { error, agentId: req.params.agentId });
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-});
 
 /**
  * Delete an agent
@@ -913,6 +733,6 @@ router.delete('/:agentId', authenticateToken, async (req: AuthenticatedRequest, 
 });
 
 // Mount flow routes
-router.use('/', agentFlowRoutes);
+
 
 export default router;

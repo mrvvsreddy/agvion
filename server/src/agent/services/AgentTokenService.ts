@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { redisClient } from '../../redis';
 import logger from '../../utils/logger';
 import { AgentsRepository } from '../../database/repositories/AgentsRepository';
+import { WorkspacesRepository } from '../../database/repositories/WorkspacesRepository';
 
 export interface AgentTokenData {
   agentId: string;
@@ -38,9 +39,11 @@ export class AgentTokenService {
   private readonly SESSION_ABSOLUTE_MAX = 604800; // 7 days absolute maximum
   private readonly MAX_LENGTH = 255;
   private agentsRepository: AgentsRepository;
+  private workspacesRepository: WorkspacesRepository;
 
   private constructor() {
     this.agentsRepository = new AgentsRepository();
+    this.workspacesRepository = new WorkspacesRepository();
   }
 
   public static getInstance(): AgentTokenService {
@@ -107,9 +110,9 @@ export class AgentTokenService {
       // Note: Reverse index not implemented due to RedisService limitations
       // For now, we'll rely on individual token management
 
-      logger.info('Agent token generated', { 
-        agentId, 
-        tenantId, 
+      logger.info('Agent token generated', {
+        agentId,
+        tenantId,
         workspaceId,
         token: token.substring(0, 8) + '...'
       });
@@ -137,17 +140,17 @@ export class AgentTokenService {
     try {
       const tokenKey = `agent_token:${token}`;
       const tokenData = await redisClient.getJson<AgentTokenData>(tokenKey);
-      
+
       if (!tokenData) {
         logger.warn('Invalid or expired agent token', { token: token.substring(0, 8) + '...' });
         return null;
       }
-      
+
       // Check hard expiry (absolute max age)
       const createdAt = new Date(tokenData.createdAt).getTime();
       const now = Date.now();
       const tokenAge = (now - createdAt) / 1000; // in seconds
-      
+
       if (tokenAge > this.SESSION_ABSOLUTE_MAX) {
         // Token exceeded max lifetime
         try {
@@ -155,51 +158,51 @@ export class AgentTokenService {
         } catch (deleteError) {
           logger.warn('Failed to delete expired token from Redis', { error: deleteError });
         }
-        logger.warn('Agent token expired (hard limit)', { 
-          agentId: tokenData.agentId, 
-          ageSeconds: tokenAge 
+        logger.warn('Agent token expired (hard limit)', {
+          agentId: tokenData.agentId,
+          ageSeconds: tokenAge
         });
         return null;
       }
-      
+
       // Check revocation version (with fallback if Redis fails)
       try {
         const revocationVersionKey = `agent:${tokenData.agentId}:revocation_version`;
         const currentRevocationVersion = await redisClient.getCache(revocationVersionKey) as string || '0';
-        
+
         if (parseInt(currentRevocationVersion, 10) > (tokenData.revocationVersion || 0)) {
-          logger.warn('Token invalidated by revocation', { 
-            agentId: tokenData.agentId, 
+          logger.warn('Token invalidated by revocation', {
+            agentId: tokenData.agentId,
             tokenVersion: tokenData.revocationVersion,
-            currentVersion: currentRevocationVersion 
+            currentVersion: currentRevocationVersion
           });
           return null;
         }
       } catch (revocationError) {
         // If revocation check fails, log warning but continue (fail open for availability)
-        logger.warn('Failed to check token revocation, allowing access', { 
-          error: revocationError, 
-          agentId: tokenData.agentId 
+        logger.warn('Failed to check token revocation, allowing access', {
+          error: revocationError,
+          agentId: tokenData.agentId
         });
       }
-      
+
       // Sliding window: extend TTL on every validation (user stays logged in while active)
       try {
         await redisClient.setJson(tokenKey, tokenData, this.IDLE_TIMEOUT);
       } catch (ttlError) {
         // If TTL update fails, log warning but continue (fail open for availability)
-        logger.warn('Failed to update token TTL, continuing with validation', { 
-          error: ttlError, 
-          agentId: tokenData.agentId 
+        logger.warn('Failed to update token TTL, continuing with validation', {
+          error: ttlError,
+          agentId: tokenData.agentId
         });
       }
-      
-      logger.info('Agent token validated', { 
-        agentId: tokenData.agentId, 
+
+      logger.info('Agent token validated', {
+        agentId: tokenData.agentId,
         tenantId: tokenData.tenantId,
         ageSeconds: tokenAge
       });
-      
+
       return tokenData;
     } catch (error) {
       logger.error('Failed to validate agent token', { error, token: token.substring(0, 8) + '...' });
@@ -210,7 +213,7 @@ export class AgentTokenService {
   /**
    * Refresh an existing token (generate new one, invalidate old) - atomic operation
    */
-  
+
   async refreshAgentToken(
     oldToken: string,
     agentId: string,
@@ -255,33 +258,33 @@ export class AgentTokenService {
       try {
         // 1. Create new token first
         await redisClient.setJson(newTokenKey, newTokenData, this.IDLE_TIMEOUT);
-        
+
         // 2. Verify new token exists before deleting old
         const verifyNewToken = await redisClient.getJson<AgentTokenData>(newTokenKey);
         if (!verifyNewToken) {
           throw new Error('New token creation failed');
         }
-        
+
         // 3. Only then delete old token
         await redisClient.deleteKey(oldTokenKey);
-        
-        logger.info('Token refreshed atomically', { 
-          agentId, 
+
+        logger.info('Token refreshed atomically', {
+          agentId,
           oldToken: oldToken.substring(0, 8) + '...',
           newToken: newToken.substring(0, 8) + '...'
         });
       } catch (error) {
         // If new token exists but old couldn't be deleted, warn but return success
         // Old token will expire naturally; new token is valid
-        logger.warn('Token refresh: cleanup incomplete but session valid', { 
+        logger.warn('Token refresh: cleanup incomplete but session valid', {
           error: error instanceof Error ? error.message : 'unknown',
           agentId,
           newToken: newToken.substring(0, 8) + '...'
         });
       }
 
-      logger.info('Agent token refreshed', { 
-        agentId, 
+      logger.info('Agent token refreshed', {
+        agentId,
         oldToken: oldToken.substring(0, 8) + '...',
         newToken: newToken.substring(0, 8) + '...'
       });
@@ -323,13 +326,13 @@ export class AgentTokenService {
       const revocationVersionKey = `agent:${agentId}:revocation_version`;
       const currentVersion = await redisClient.getCache(revocationVersionKey) as string || '0';
       const newVersion = (parseInt(currentVersion, 10) + 1).toString();
-      
+
       // Increment revocation version - all tokens with lower version are now invalid
       await redisClient.setCache(revocationVersionKey, newVersion, 86400); // 24 hours TTL
-      
-      logger.info('All agent tokens invalidated', { 
-        agentId, 
-        newRevocationVersion: newVersion 
+
+      logger.info('All agent tokens invalidated', {
+        agentId,
+        newRevocationVersion: newVersion
       });
     } catch (error) {
       logger.error('Failed to invalidate all agent tokens', { error, agentId });
@@ -354,13 +357,13 @@ export class AgentTokenService {
         logger.warn('Invalid input: empty or non-string', { key });
         return false;
       }
-      
+
       // 2. Check length
       if (value.length > this.MAX_LENGTH) {
         logger.warn('Invalid input: exceeds max length', { key, length: value.length, max: this.MAX_LENGTH });
         return false;
       }
-      
+
       // 3. Check format based on field type
       if (key === 'agentId' || key === 'tenantId' || key === 'userId') {
         // Agent ID, Tenant ID, and User ID can be custom format (alphanumeric)
@@ -413,22 +416,28 @@ export class AgentTokenService {
   ): Promise<boolean> {
     try {
       const agent = await this.agentsRepository.findById(agentId);
-      
+
       if (!agent) {
         logger.warn('Agent not found', { agentId });
         return false;
       }
-      
-      if (agent.tenant_id !== tenantId) {
-        logger.warn('Agent tenant mismatch', { agentId, expectedTenant: tenantId, actualTenant: agent.tenant_id });
+
+      // Check workspace ownership
+      const workspace = await this.workspacesRepository.findById(agent.workspace_id);
+      if (!workspace || workspace.tenant_id !== tenantId) {
+        logger.warn('Agent tenant mismatch (via workspace)', {
+          agentId,
+          expectedTenant: tenantId,
+          actualTenant: workspace?.tenant_id
+        });
         return false;
       }
-      
+
       if (agent.workspace_id !== workspaceId) {
         logger.warn('Agent workspace mismatch', { agentId, expectedWorkspace: workspaceId, actualWorkspace: agent.workspace_id });
         return false;
       }
-      
+
       return true;
     } catch (error) {
       logger.error('Failed to validate agent access', { error, agentId, tenantId, workspaceId });

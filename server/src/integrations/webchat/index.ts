@@ -1,26 +1,9 @@
-// path: integrations/webchat/index.ts
 import { Integration } from '../../types/integrations';
 import logger from '../../utils/logger';
 import { executeWebhookReply, validateWebhookReplyConfig } from './webhook-reply';
 
-// Export webchat types and utilities
-export type {
-  MessageType,
-  TextPayload,
-  IncomingMessage,
-  ResponseMessage,
-  WebhookResponse,
-} from './webhook-server';
-
-export type {
-  WebhookReplyConfig,
-  ReplyContext,
-  ReplyData,
-  WebhookReplyResult
-} from './webhook-reply';
-
 // Export the webhook server for Express mounting
-export { default as webchatWebhookServer } from './webhook-server';
+
 export { default as webchatConnectRouter } from './connect';
 
 /**
@@ -50,12 +33,12 @@ export { default as webchatConnectRouter } from './connect';
 export default {
   register(): Integration {
     const functions = new Map();
-    
+
     // Register processMessage function
     functions.set('processMessage', {
       fn: async (context: any, params: any) => {
         logger.info('Webchat processMessage called', { params });
-        
+
         return {
           success: true,
           message: 'Message processed by webchat integration',
@@ -69,12 +52,12 @@ export default {
         description: 'Process incoming webchat messages and execute workflows'
       }
     });
-    
+
     // Register validateMessage function
     functions.set('validateMessage', {
       fn: async (context: any, params: any) => {
         logger.info('Webchat validateMessage called', { params });
-        
+
         return {
           valid: true,
           message: 'Message validation passed',
@@ -114,7 +97,7 @@ export default {
 
         // Execute the webhook reply
         const result = await executeWebhookReply(context, params);
-        
+
         return result;
       },
       meta: {
@@ -137,7 +120,7 @@ export default {
       ],
       supportedTypes: [
         'text',
-        'image', 
+        'image',
         'audio',
         'video',
         'file',

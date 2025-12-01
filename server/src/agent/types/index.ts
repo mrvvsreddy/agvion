@@ -1,12 +1,35 @@
+
 // agent/types/index.ts
 export interface Agent {
   id: string;
-  tenant_id: string;
+  workspace_id: string;
   name: string;
+  status: string;
+  brain: any;
+  goals: any;
+  autonomy_mode: string;
+  approval_required: boolean;
+  tool_permissions: any;
+  llm_provider: string | null;
+  llm_secret_ref: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  last_executed_at: string | null;
   created_at: string;
   updated_at: string;
-  workspace_id: string | null;
-  status: string;
+  system_prompt: string | null;
+  llm_model: string | null;
+  secret_id: string | null;
+  temperature: number | null;
+  max_tokens: number | null;
+  response_timeout_ms: number | null;
+  is_public: boolean | null;
+  widget_enabled: boolean | null;
+  api_enabled: boolean | null;
+  total_messages: number | null;
+  total_tokens: number | null;
+  tools: any | null;
+  memory_config: any | null;
   prompt?: string | null; // Extracted from main workflow system prompt
 }
 
@@ -39,15 +62,15 @@ export interface AgentStudioData {
   databaseConnections: any[];
   integrations: any[];
   conversations?: {
-  totalConversations: number;
-  activeConversations: number;
-  totalMessages: number;
-  recentActivity: {
-    conversationsCreated: number;
-    messagesSent: number;
-    lastActivity: string;
-  };
-} | undefined;
+    totalConversations: number;
+    activeConversations: number;
+    totalMessages: number;
+    recentActivity: {
+      conversationsCreated: number;
+      messagesSent: number;
+      lastActivity: string;
+    };
+  } | undefined;
 }
 
 export interface GetAgentStudioDataResponse {

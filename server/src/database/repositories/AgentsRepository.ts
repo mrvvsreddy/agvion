@@ -12,43 +12,7 @@ export class AgentsRepository extends BaseRepository<Agent, AgentInsert, AgentUp
     super('agents');
   }
 
-  async getAgentsByTenant(tenantId: string): Promise<Agent[]> {
-    try {
-      const { data, error } = await this.client
-        .from('agents')
-        .select('*')
-        .eq('tenant_id', tenantId);
 
-      if (error) {
-        logger.error('Failed to get agents by tenant', { error, tenantId });
-        throw new Error(`Failed to get agents by tenant: ${error.message}`);
-      }
-
-      return data as Agent[];
-    } catch (error) {
-      logger.error('Error getting agents by tenant', { error, tenantId });
-      throw error;
-    }
-  }
-
-  async countByTenant(tenantId: string): Promise<number> {
-    try {
-      const { count, error } = await this.client
-        .from('agents')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', tenantId);
-
-      if (error) {
-        logger.error('Failed to count agents by tenant', { error, tenantId });
-        throw new Error(`Failed to count agents by tenant: ${error.message}`);
-      }
-
-      return count || 0;
-    } catch (error) {
-      logger.error('Error counting agents by tenant', { error, tenantId });
-      throw error;
-    }
-  }
 
   async getAgentsByWorkspace(workspaceId: string): Promise<Agent[]> {
     try {
@@ -69,22 +33,43 @@ export class AgentsRepository extends BaseRepository<Agent, AgentInsert, AgentUp
     }
   }
 
-  async getAgentsByStatus(tenantId: string, status: string): Promise<Agent[]> {
+  async getAgentsByWorkspaces(workspaceIds: string[]): Promise<Agent[]> {
+    try {
+      if (workspaceIds.length === 0) return [];
+
+      const { data, error } = await this.client
+        .from('agents')
+        .select('*')
+        .in('workspace_id', workspaceIds);
+
+      if (error) {
+        logger.error('Failed to get agents by workspaces', { error, workspaceIds });
+        throw new Error(`Failed to get agents by workspaces: ${error.message}`);
+      }
+
+      return data as Agent[];
+    } catch (error) {
+      logger.error('Error getting agents by workspaces', { error, workspaceIds });
+      throw error;
+    }
+  }
+
+  async getAgentsByStatus(workspaceId: string, status: string): Promise<Agent[]> {
     try {
       const { data, error } = await this.client
         .from('agents')
         .select('*')
-        .eq('tenant_id', tenantId)
+        .eq('workspace_id', workspaceId)
         .eq('status', status);
 
       if (error) {
-        logger.error('Failed to get agents by status', { error, tenantId, status });
+        logger.error('Failed to get agents by status', { error, workspaceId, status });
         throw new Error(`Failed to get agents by status: ${error.message}`);
       }
 
       return data as Agent[];
     } catch (error) {
-      logger.error('Error getting agents by status', { error, tenantId, status });
+      logger.error('Error getting agents by status', { error, workspaceId, status });
       throw error;
     }
   }

@@ -29,10 +29,10 @@ import tablesRoutes from './routes/tables';
 import { knowledgeRoutes } from './agent/services/knowledge';
 
 // Import webchat system
-import { webchatWebhookServer, webchatConnectRouter } from './integrations/webchat';
+import { webchatConnectRouter } from './integrations/webchat';
 
 // Import workflow system
-import workflowRoutes from './workflow/routes/workflowRoutes';
+
 
 // Provide a typed import; if types are missing, a shim will be added
 import cookieParser from 'cookie-parser';
@@ -114,14 +114,14 @@ app.use('/api/workspace', workspaceRoutes);
 app.use('/api/agents', agentRoutes);
 
 // Mount workflow routes
-app.use('/api/workflows', workflowRoutes);
+
 
 // Mount tables routes
 app.use('/api/tables', tablesRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 
 // Mount webchat routes (no rate limiting for webchat)
-app.use('/webchat', webchatWebhookServer);
+
 app.use('/webchat', webchatConnectRouter);
 
 // Database connection middleware (only for /api routes)

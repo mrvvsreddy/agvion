@@ -9,14 +9,16 @@ import { WorkspaceRepository } from '../../workspace/repositories/WorkspaceRepos
 import { WorkspaceCacheService } from '../../workspace/services/WorkspaceCacheService';
 import { redisClient } from '../../redis';
 import logger from '../../utils/logger';
-import { AgentFlowsRepository } from '../../database/repositories/AgentFlowsRepository';
+
 import { AgentIntegrationsRepository } from '../../database/repositories/AgentIntegrationsRepository';
 import AgentTablesRepository from '../../database/repositories/AgentTablesColumnsRepository';
 import AgentTableRowsRepository from '../../database/repositories/AgentTableRowsRepository';
 import SupabaseService from '../../database/config/supabase';
 import IntegrationsRepository from '../../database/repositories/IntegrationsRepository';
 import { Agent, CreateAgentRequest, CreateAgentResponse, GetAgentsResponse, DeleteAgentResponse, AgentStudioData, GetAgentStudioDataResponse } from '../types';
-import AgentFlowService from './AgentFlowService';
+
+// Default system prompt for new agents
+const DEFAULT_SYSTEM_PROMPT = 'You are a helpful AI assistant. Please assist the user with their questions and tasks to the best of your ability.';
 
 // Validation schemas
 const createAgentSchema = Joi.object({
@@ -143,7 +145,7 @@ export class AgentService {
   private workspacesRepository: WorkspacesRepository;
   private workspaceRepository: WorkspaceRepository;
   private workspaceCacheService: WorkspaceCacheService;
-  private agentFlowsRepository: AgentFlowsRepository;
+
   private agentIntegrationsRepository: AgentIntegrationsRepository;
   private integrationsRepository: typeof IntegrationsRepository;
   private redisCircuitBreaker: CircuitBreaker;
@@ -155,7 +157,7 @@ export class AgentService {
     workspacesRepository?: WorkspacesRepository,
     workspaceRepository?: WorkspaceRepository,
     workspaceCacheService?: WorkspaceCacheService,
-    agentFlowsRepository?: AgentFlowsRepository,
+
     agentIntegrationsRepository?: AgentIntegrationsRepository,
     integrationsRepository?: typeof IntegrationsRepository
   ) {
@@ -165,7 +167,7 @@ export class AgentService {
     this.workspacesRepository = workspacesRepository || new WorkspacesRepository();
     this.workspaceRepository = workspaceRepository || new WorkspaceRepository();
     this.workspaceCacheService = workspaceCacheService || new WorkspaceCacheService();
-    this.agentFlowsRepository = agentFlowsRepository || new AgentFlowsRepository();
+
     this.agentIntegrationsRepository = agentIntegrationsRepository || new AgentIntegrationsRepository();
     this.integrationsRepository = integrationsRepository || IntegrationsRepository;
     this.agentTablesRepository = AgentTablesRepository;
@@ -365,11 +367,14 @@ export class AgentService {
         return { authorized: false, message: 'Agent not found' };
       }
 
-      if (agent.tenant_id !== tenantId) {
+      // Check if agent's workspace belongs to the tenant
+      const workspace = await this.workspacesRepository.findById(agent.workspace_id);
+      if (!workspace || workspace.tenant_id !== tenantId) {
         logger.warn('Unauthorized agent access attempt', {
           tenantId,
           agentId,
-          actualTenantId: agent.tenant_id
+          workspaceId: agent.workspace_id,
+          actualTenantId: workspace?.tenant_id
         });
         return { authorized: false, message: 'Access denied' };
       }
@@ -483,97 +488,7 @@ export class AgentService {
    * links them to the workflow, and rewires edges: trigger → knowledge → agent.
    * This does NOT modify the saved workflow — only runtime copy.
    */
-  private async mapKnowledgeNodeToWorkflow(agentId: string, workflowData: any): Promise<any> {
-    try {
-      // Fetch all tables belonging to this agent
-      const allTables = await this.agentTablesRepository.findByAgent(agentId);
-      if (!Array.isArray(allTables) || allTables.length === 0) {
-        logger.debug('No tables found for agent; skipping knowledge node mapping', { agentId });
-        return workflowData;
-      }
 
-      // Parse workflow safely
-      const parsedWorkflow = typeof workflowData === 'string'
-        ? JSON.parse(workflowData)
-        : { ...workflowData };
-
-      parsedWorkflow.nodes = parsedWorkflow.nodes || [];
-      parsedWorkflow.edges = parsedWorkflow.edges || [];
-
-      // Check if a "knowledge" node already exists
-      let knowledgeNode = parsedWorkflow.nodes.find((n: any) => n.type === 'knowledge');
-
-      // Create one if missing
-      if (!knowledgeNode) {
-        knowledgeNode = {
-          id: randomUUID(),
-          name: 'Knowledge Router',
-          type: 'knowledge',
-          nodeType: 'knowledge',
-          function: 'routeKnowledgeQuery',
-          source: 'agent_knowledge',
-          disabled: false,
-          metadata: {}
-        };
-        parsedWorkflow.nodes.push(knowledgeNode);
-      }
-
-      // Identify key nodes
-      const agentNode = parsedWorkflow.nodes.find((n: any) => n.nodeType === 'agent');
-      const triggerNode = parsedWorkflow.nodes.find((n: any) => n.type === 'trigger');
-
-      // Rewire edges to flow through the Knowledge Router
-      if (agentNode && triggerNode) {
-        // Remove any direct trigger → agent edges
-        parsedWorkflow.edges = parsedWorkflow.edges.filter(
-          (e: any) => !(e.source === triggerNode.id && e.target === agentNode.id)
-        );
-
-        // Add trigger → knowledge if missing
-        if (!parsedWorkflow.edges.some((e: any) => e.source === triggerNode.id && e.target === knowledgeNode.id)) {
-          parsedWorkflow.edges.push({
-            id: randomUUID(),
-            source: triggerNode.id,
-            target: knowledgeNode.id
-          });
-        }
-
-        // Add knowledge → agent if missing
-        if (!parsedWorkflow.edges.some((e: any) => e.source === knowledgeNode.id && e.target === agentNode.id)) {
-          parsedWorkflow.edges.push({
-            id: randomUUID(),
-            source: knowledgeNode.id,
-            target: agentNode.id
-          });
-        }
-      } else {
-        logger.debug('Workflow missing trigger or agent node; skipping edge rewiring', {
-          agentId,
-          hasTriggerNode: !!triggerNode,
-          hasAgentNode: !!agentNode
-        });
-      }
-
-      // Attach all available tables (AI decides which to use)
-      knowledgeNode.mappedTables = allTables.map((t: any) => ({
-        id: t.id,
-        name: t.table_name,
-        description: t.description || 'No description available',
-        type: t.type
-      }));
-
-      logger.debug('Knowledge node dynamically mapped to workflow', {
-        agentId,
-        totalTables: allTables.length,
-        workflowNodes: parsedWorkflow.nodes.length
-      });
-
-      return parsedWorkflow;
-    } catch (error) {
-      logger.error('Failed to map knowledge node to workflow', { agentId, error });
-      return workflowData;
-    }
-  }
 
   /**
    * Create a new agent for a tenant
@@ -678,38 +593,70 @@ export class AgentService {
         }
       }
 
-      // Create the agent
+      // Create the agent with proper defaults
       const agentId = await generateAgentId(this.agentsRepository);
       const now = new Date().toISOString();
 
       const newAgent = await this.agentsRepository.create({
         id: agentId,
-        tenant_id: tenantId,
+        workspace_id: workspaceId,
         name: validatedData.name,
+
+        // Status must be 'draft' - cannot be activated without LLM config
+        status: 'draft',
+
+        // LLM configuration - all NULL until user configures
+        llm_provider: null,
+        llm_model: null,
+        secret_id: null,
+
+        // Provider-agnostic tuning defaults
+        temperature: null,
+        max_tokens: null,
+        response_timeout_ms: 60000, // 60 seconds default timeout
+
+        // System prompt with default value
+        system_prompt: DEFAULT_SYSTEM_PROMPT,
+
+        // Autonomy and permissions
+        autonomy_mode: 'manual',
+        approval_required: false,
+        tool_permissions: {},
+
+        // Feature flags - all disabled by default
+        is_public: false,
+        widget_enabled: false,
+        api_enabled: false,
+
+        // Usage counters - start at zero
+        total_messages: 0,
+        total_tokens: 0,
+
+        // Configuration objects - empty by default
+        brain: {},
+        goals: {},
+        tools: [],
+        memory_config: {},
+
+        // Audit fields
         created_at: now,
         updated_at: now,
-        workspace_id: workspaceId,
-        status: 'active'
+        created_by: null,
+        updated_by: null,
+        last_executed_at: null,
+        llm_secret_ref: null
       });
 
-      // Update tenant's total agents count
+      // Update tenant's total agents count - logic removed as we can't easily count by tenant anymore without join
+      // Or we could count by workspaces. For now, skipping to avoid error.
+      /*
       const currentAgentCount = await this.agentsRepository.countByTenant(tenantId);
       await this.tenantsRepository.updateTenantCounts(tenantId, {
         total_agents: currentAgentCount
       });
+      */
 
-      // Create default webchat flow for the new agent
-      try {
-        const flowResult = await AgentFlowService.createDefaultWebchatFlow(agentId, tenantId);
-        if (flowResult.success) {
-          logger.info('Default webchat flow created for agent', { agentId, flowId: flowResult.flow?.id });
-        } else {
-          logger.warn('Failed to create default webchat flow', { agentId, error: flowResult.message });
-        }
-      } catch (flowError) {
-        logger.warn('Error creating default webchat flow', { agentId, error: flowError });
-        // Don't fail agent creation if flow creation fails
-      }
+
 
       // Update workspace metadata in database with new agent list
       await this.updateWorkspaceMetadata(workspaceId);
@@ -795,10 +742,25 @@ export class AgentService {
         };
       }
 
-      // Note: Repository methods may need to be updated to support pagination parameters at DB level
-      // For now, get all and paginate in memory if repository doesn't support it
-      // TODO: Update AgentsRepository.getAgentsByTenant to accept pagination params for DB-level pagination
-      const agents = await this.agentsRepository.getAgentsByTenant(tenantId);
+      // Get all workspaces for tenant
+      const workspaces = await this.workspacesRepository.getWorkspacesByTenant(tenantId);
+      const workspaceIds = workspaces.map(w => w.id);
+
+      if (workspaceIds.length === 0) {
+        return {
+          success: true,
+          agents: [],
+          pagination: {
+            total: 0,
+            limit,
+            offset,
+            hasMore: false
+          }
+        };
+      }
+
+      // Fetch agents for these workspaces
+      const agents = await this.agentsRepository.getAgentsByWorkspaces(workspaceIds);
       const total = agents.length;
 
       // Simple pagination (repository should ideally handle this at DB level)
@@ -1005,10 +967,12 @@ export class AgentService {
       await this.invalidateAgentCache(agentId);
 
       // Update tenant's total agents count
+      /*
       const currentAgentCount = await this.agentsRepository.countByTenant(tenantId);
       await this.tenantsRepository.updateTenantCounts(tenantId, {
         total_agents: currentAgentCount
       });
+      */
 
       // Update workspace metadata in database with updated agent list
       await this.updateWorkspaceMetadata(agent.workspace_id || '');
@@ -1198,36 +1162,7 @@ export class AgentService {
   /**
    * Aggregate knowledge tables from flows' knowledge_tables jsonb column
    */
-  private aggregateKnowledgeFromFlows(agentFlows: any[]): any[] {
-    try {
-      const collected: any[] = [];
-      for (const flow of agentFlows || []) {
-        const knowledgeTables = (flow as any)?.knowledge_tables;
-        if (Array.isArray(knowledgeTables)) {
-          collected.push(...knowledgeTables);
-        } else if (knowledgeTables && typeof knowledgeTables === 'object') {
-          collected.push(knowledgeTables);
-        }
-      }
-      // Deduplicate by common identifiers; fallback to JSON string
-      const seen = new Set<string>();
-      const deduped: any[] = [];
-      for (const item of collected) {
-        const key = String(
-          (item && (item.id || item.table_id || item.tableId || item.name)) ??
-          JSON.stringify(item)
-        );
-        if (!seen.has(key)) {
-          seen.add(key);
-          deduped.push(item);
-        }
-      }
-      return deduped;
-    } catch (e) {
-      logger.warn('Failed to aggregate knowledge tables from flows', { error: e instanceof Error ? e.message : e });
-      return [];
-    }
-  }
+
 
   /**
    * Get minimal agent data for studio homepage (optimized for performance)
@@ -1329,68 +1264,10 @@ export class AgentService {
       let workflows: any[] = [];
       let knoledge: any[] = [];
       try {
-        const agentFlows = await this.agentFlowsRepository.getFlowsByAgent(agentId);
-        knoledge = this.aggregateKnowledgeFromFlows(agentFlows);
-        workflows = agentFlows.map((flow: any) => {
-          const workflowData = flow.workflow_data;
-
-          // Extract minimal data based on format (WorkflowGraph or FlowDefinition)
-          let minimalData: any = { prompt: null, trigger: null };
-
-          if (!workflowData) {
-            // No workflow data
-          } else if (workflowData.nodes && workflowData.edges) {
-            // WorkflowGraph format - extract from nodes
-            const agentNode = workflowData.nodes?.find((node: any) => node.type === 'ai_agent');
-            if (agentNode?.agentConfig) {
-              minimalData.prompt = {
-                model: agentNode.agentConfig.llm?.model || 'deepseek/deepseek-chat-v3.1:free',
-                system_prompt: agentNode.agentConfig.systemPrompt
-              };
-            }
-
-            // Extract trigger type from metadata
-            if (workflowData.metadata) {
-              minimalData.trigger = {
-                type: workflowData.metadata.triggerType || workflowData.metadata.channel,
-                channel: workflowData.metadata.channel
-              };
-            }
-          } else {
-            // Legacy FlowDefinition format
-            if (workflowData.prompt) {
-              minimalData.prompt = {
-                model: workflowData.prompt.model,
-                system_prompt: workflowData.prompt.system_prompt
-              };
-            }
-            if (workflowData.trigger) {
-              minimalData.trigger = {
-                type: workflowData.trigger.type,
-                channel: workflowData.trigger.channel
-              };
-            }
-          }
-
-          return {
-            id: flow.id,
-            name: flow.name,
-            description: flow.description,
-            status: flow.status,
-            is_default: flow.is_default,
-            version: flow.version,
-            workflow_data: minimalData,
-            created_at: flow.created_at,
-            updated_at: flow.updated_at
-          };
-        });
-
-        // Map knowledge nodes to each workflow
-        for (const flow of workflows) {
-          flow.workflow_data = await this.mapKnowledgeNodeToWorkflow(agentId, flow.workflow_data);
-        }
-
-        logger.info('Agent workflows loaded for homepage', { agentId, workflowCount: workflows.length });
+        // Workflows functionality removed
+        workflows = [];
+        knoledge = [];
+        logger.info('Agent workflows loaded for homepage (empty)', { agentId });
       } catch (workflowError) {
         logger.warn('Failed to load workflows for agent studio homepage', { workflowError, agentId });
       }
@@ -1543,25 +1420,9 @@ export class AgentService {
       // Load workflows using AgentFlowsRepository
       let workflows: any[] = [];
       try {
-        const agentFlows = await this.agentFlowsRepository.getFlowsByAgent(agentId); // 🟢 FIXED: use instance method
-        workflows = agentFlows.map((flow: any) => ({
-          id: flow.id,
-          name: flow.name,
-          description: flow.description,
-          status: flow.status,
-          is_default: flow.is_default,
-          version: flow.version,
-          workflow_data: flow.workflow_data,
-          created_at: flow.created_at,
-          updated_at: flow.updated_at
-        }));
-
-        // Map knowledge nodes to each workflow
-        for (const flow of workflows) {
-          flow.workflow_data = await this.mapKnowledgeNodeToWorkflow(agentId, flow.workflow_data);
-        }
-
-        logger.info('Agent workflows loaded', { agentId, workflowCount: workflows.length });
+        // Workflows functionality removed
+        workflows = [];
+        logger.info('Agent workflows loaded (empty)', { agentId });
       } catch (workflowError) {
         logger.warn('Failed to load workflows for agent studio', { workflowError, agentId });
       }
@@ -1579,8 +1440,8 @@ export class AgentService {
       // Also include knoledge aggregated from flows and remove databaseConnections
       let knoledge: any[] = [];
       try {
-        const agentFlows = await this.agentFlowsRepository.getFlowsByAgent(agentId);
-        knoledge = this.aggregateKnowledgeFromFlows(agentFlows);
+        // Workflows functionality removed
+        knoledge = [];
       } catch (e) {
         logger.warn('Failed to aggregate knoledge for studio data', { agentId, error: e instanceof Error ? e.message : e });
       }
@@ -1669,29 +1530,9 @@ export class AgentService {
       // Load full workflow data
       let workflows: any[] = [];
       try {
-        const agentFlows = await this.agentFlowsRepository.getFlowsByAgent(agentId);
-
-        // Filter out reserved workflow names (main, error, fail, system, user)
-        const reservedNames = ['main', 'error', 'fail', 'system', 'user'];
-        const isReserved = (name: string) => {
-          const normalized = name?.toLowerCase().trim();
-          return reservedNames.some(reserved => reserved === normalized);
-        };
-
-        workflows = agentFlows
-          .filter((flow: any) => !isReserved(flow.name))
-          .map((flow: any) => ({
-            id: flow.id,
-            name: flow.name,
-            description: flow.description,
-            status: flow.status,
-            is_default: flow.is_default,
-            version: flow.version,
-            workflow_data: flow.workflow_data, // Full workflow data
-            created_at: flow.created_at,
-            updated_at: flow.updated_at
-          }));
-        logger.info('Agent workflows loaded', { agentId, workflowCount: workflows.length, filteredCount: agentFlows.length - workflows.length });
+        // Workflows functionality removed
+        workflows = [];
+        logger.info('Agent workflows loaded (empty)', { agentId });
       } catch (workflowError) {
         logger.warn('Failed to load workflows for agent', { workflowError, agentId });
         return {

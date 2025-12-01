@@ -49,7 +49,7 @@ export class WorkspaceRepository {
     const result = await this.workspacesRepo.findByTenant(tenantId, { page: 1, limit: 1, orderBy: 'created_at', orderDirection: 'desc' as any });
     const first = result.data?.[0];
     if (!first) return null;
-    
+
     const workspace = this.mapDb(first as DbWorkspace);
     return await this.enrichWorkspaceWithAgents(workspace);
   }
@@ -57,7 +57,7 @@ export class WorkspaceRepository {
   async getWorkspaceWithAgents(workspaceId: string): Promise<Workspace | null> {
     const db = await this.workspacesRepo.findById(workspaceId);
     if (!db) return null;
-    
+
     const workspace = this.mapDb(db);
     return await this.enrichWorkspaceWithAgents(workspace);
   }
@@ -66,7 +66,7 @@ export class WorkspaceRepository {
   async updateWorkspaceMetadata(workspaceId: string, metadata: any): Promise<Workspace | null> {
     const updatedDb = await this.workspacesRepo.updateMetadata(workspaceId, metadata);
     if (!updatedDb) return null;
-    
+
     const workspace = this.mapDb(updatedDb);
     return await this.enrichWorkspaceWithAgents(workspace);
   }
@@ -87,11 +87,11 @@ export class WorkspaceRepository {
       }
 
       if (workspace.tenant_id !== tenantId) {
-        logger.warn('Workspace tenant mismatch during access verification', { 
-          workspaceId, 
-          userId, 
+        logger.warn('Workspace tenant mismatch during access verification', {
+          workspaceId,
+          userId,
           workspaceTenantId: workspace.tenant_id,
-          userTenantId: tenantId 
+          userTenantId: tenantId
         });
         throw new WorkspaceAccessError('Workspace does not belong to user tenant', {
           workspaceId,
@@ -103,7 +103,7 @@ export class WorkspaceRepository {
       // For now, we assume all users in the same tenant have access to all workspaces
       // In a more complex system, you might check user_workspace_memberships table
       // or similar role-based access control
-      
+
       const access: UserWorkspaceAccess = {
         userId,
         workspaceId,
@@ -119,12 +119,12 @@ export class WorkspaceRepository {
       if (error instanceof WorkspaceAccessError || error instanceof WorkspaceNotFoundError) {
         throw error;
       }
-      
-      logger.error('Error verifying user workspace access', { 
+
+      logger.error('Error verifying user workspace access', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        userId, 
-        workspaceId, 
-        tenantId 
+        userId,
+        workspaceId,
+        tenantId
       });
       throw new WorkspaceAccessError('Failed to verify workspace access', {
         userId,
@@ -139,19 +139,19 @@ export class WorkspaceRepository {
     try {
       // Use a more efficient query that gets agents in a single call
       const agents = await this.agentsRepo.getAgentsByWorkspace(workspace.id);
-      
+
       // Map agents with proper error handling
       const mappedAgents: Agent[] = agents.map(agent => {
         if (!agent.workspace_id) {
           logger.warn('Agent found without workspace_id', { agentId: agent.id, workspaceId: workspace.id });
         }
-        
+
         return {
           id: agent.id,
-          tenantId: agent.tenant_id,
+          tenantId: workspace.tenantId,
           workspaceId: agent.workspace_id ?? workspace.id, // Use workspace.id as fallback
           name: agent.name,
-          description: agent.description,
+          description: null, // Description removed from agents table
           status: agent.status,
           createdAt: agent.created_at,
           updatedAt: agent.updated_at,
@@ -165,9 +165,9 @@ export class WorkspaceRepository {
         lastAgentUpdate: new Date().toISOString()
       };
 
-      logger.debug('Workspace enriched with agents', { 
-        workspaceId: workspace.id, 
-        agentCount: mappedAgents.length 
+      logger.debug('Workspace enriched with agents', {
+        workspaceId: workspace.id,
+        agentCount: mappedAgents.length
       });
 
       return {
@@ -177,11 +177,11 @@ export class WorkspaceRepository {
         metadata: updatedMetadata,
       };
     } catch (error) {
-      logger.error('Failed to enrich workspace with agents', { 
-        workspaceId: workspace.id, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      logger.error('Failed to enrich workspace with agents', {
+        workspaceId: workspace.id,
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
-      
+
       // If agents fetch fails, return workspace without agents but with error metadata
       return {
         ...workspace,
