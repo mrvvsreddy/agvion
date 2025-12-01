@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 6%;
+    --foreground: 0 0% 98%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 0 0% 20%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 15%;
+    --ring: 199 89% 48%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 0 0% 70%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 6%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 199 89% 48%;
+    
+    --gradient-cyan: linear-gradient(135deg, hsl(187 85% 60%), hsl(174 70% 50%));
+    --gradient-brand: linear-gradient(135deg, hsl(187 85% 60%), hsl(174 70% 50%));
+
+    --canvas-dot-color: rgba(255, 255, 255, 0.25);
+    --canvas-node-bg: rgba(8, 8, 8, 0.85);
+    --canvas-node-border: rgba(255, 255, 255, 0.05);
+    --canvas-node-border-active: rgba(255, 255, 255, 0.5);
+    --canvas-node-shadow: 0px 25px 65px rgba(0, 0, 0, 0.35);
+    --canvas-node-pill-bg: #f3c43b;
+    --canvas-node-pill-text: #8f5500;
+  }
+
+  [data-theme="light"] {
+    --canvas-dot-color: rgba(0, 0, 0, 0.08);
+    --canvas-node-bg: rgba(255, 255, 255, 0.98);
+    --canvas-node-border: rgba(15, 23, 42, 0.08);
+    --canvas-node-border-active: rgba(99, 102, 241, 0.9);
+    --canvas-node-shadow: 0px 25px 45px rgba(15, 23, 42, 0.12);
+    --canvas-node-pill-bg: #f7d46c;
+    --canvas-node-pill-text: #7a4b00;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Hide scrollbars */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Rich Text Editor Styles */
+  .rich-text-editor .ProseMirror {
+    outline: none;
+    min-height: 500px;
+  }
+
+  .rich-text-editor .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+    height: 0;
+  }
+
+  .rich-text-editor .ProseMirror h1 {
+    font-size: 1.875rem;
+    font-weight: 700;
+    line-height: 2.25rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .rich-text-editor .ProseMirror h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 2rem;
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .rich-text-editor .ProseMirror h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.75rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .rich-text-editor .ProseMirror p {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.625;
+  }
+
+  .rich-text-editor .ProseMirror ul,
+  .rich-text-editor .ProseMirror ol {
+    padding-left: 1.5rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .rich-text-editor .ProseMirror ul {
+    list-style-type: disc;
+  }
+
+  .rich-text-editor .ProseMirror ol {
+    list-style-type: decimal;
+  }
+
+  .rich-text-editor .ProseMirror li {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .rich-text-editor .ProseMirror strong {
+    font-weight: 700;
+  }
+
+  .rich-text-editor .ProseMirror em {
+    font-style: italic;
+  }
+
+  .rich-text-editor .ProseMirror code {
+    background-color: hsl(var(--muted));
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
+  .rich-text-editor .ProseMirror pre {
+    background-color: hsl(var(--muted));
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .rich-text-editor .ProseMirror pre code {
+    background-color: transparent;
+    padding: 0;
+    font-size: 0.875rem;
+  }
+
+  .rich-text-editor .ProseMirror blockquote {
+    border-left: 3px solid hsl(var(--border));
+    padding-left: 1rem;
+    margin-left: 0;
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+  }
+}
